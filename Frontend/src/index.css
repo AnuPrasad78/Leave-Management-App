@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  background-color: #F2F2F0;
+  color: #0E0E0E;
+}
+
+.brand-corner {
+  border-radius: 0 0 0 8px !important;
+}
+.brand-plate {
+  font-family: 'JetBrains Mono', monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+}
+
+/* Teal 3D hover effect */
+.teal-hover {
+  transition: all 0.3s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+  position: relative;
+}
+.teal-hover:hover {
+  transform: translateY(-6px);
+  box-shadow: 
+    0 4px 6px rgba(71, 162, 176, 0.15),
+    0 10px 15px rgba(71, 162, 176, 0.2),
+    0 20px 25px rgba(71, 162, 176, 0.12) !important;
+  border-color: #47A2B0 !important;
+}
+
+.teal-hover-sm {
+  transition: all 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+}
+.teal-hover-sm:hover {
+  transform: translateY(-3px);
+  box-shadow: 
+    0 4px 8px rgba(71, 162, 176, 0.2),
+    0 8px 16px rgba(71, 162, 176, 0.15) !important;
+  border-color: #47A2B0 !important;
+}
