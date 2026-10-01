@@ -14,7 +14,8 @@ import {
   X,
 } from 'lucide-react';
 
-import { employeeProfile } from '../data/employee';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 
 const navItems = [
   { label: 'Dashboard', icon: LayoutDashboard, path: '/dashboard' },
@@ -39,8 +40,22 @@ function navLabelForPath(pathname) {
 export default function AppLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
+  const { profile, user, signOut } = useAuth();
+  const [annualBalance, setAnnualBalance] = useState({ used: 0, total: 0 });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState(() => navLabelForPath(pathname));
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const year = new Date().getFullYear();
+    supabase
+      .from('leave_balances')
+      .select('credited')
+      .eq('employee_id', user.id)
+      .eq('year', year)
+      .maybeSingle()
+      .then(({ data }) => setAnnualBalance({ used: 0, total: data?.credited ?? 0 }));
+  }, [user?.id]);
 
   useEffect(() => {
     setActiveNav(navLabelForPath(pathname));
@@ -135,17 +150,17 @@ export default function AppLayout() {
           <div className="flex-1 min-h-0 overflow-y-auto overscroll-contain">
             <div className="px-6 py-6 flex flex-col items-center text-center border-b border-[#E0E0E0] bg-[#F0F7F8]">
               <div className="w-20 h-20 rounded-full bg-[#47A2B0] flex items-center justify-center text-white text-2xl font-bold mb-3 border-2 border-[#ABC7CA] shadow-sm">
-                {employeeProfile.initials}
+                {profile?.initials ?? '—'}
               </div>
-              <p className="font-bold text-sm text-[#0E0E0E]">{employeeProfile.name}</p>
-              <p className="text-[#47A2B0] text-xs mt-1 brand-plate tracking-wider">{employeeProfile.role}</p>
-              <p className="text-[#777] text-xs mt-1">{employeeProfile.email}</p>
+              <p className="font-bold text-sm text-[#0E0E0E]">{profile?.name ?? 'Employee'}</p>
+              <p className="text-[#47A2B0] text-xs mt-1 brand-plate tracking-wider">{profile?.role ?? ''}</p>
+              <p className="text-[#777] text-xs mt-1">{profile?.email ?? user?.email ?? ''}</p>
 
               <div className="flex justify-center mt-5 text-xs bg-white border border-[#ABC7CA] px-4 py-2 brand-corner">
                 <div className="flex items-center gap-1.5">
                   <CalendarOff className="w-3.5 h-3.5 text-[#47A2B0]" />
                   <strong className="text-[#0E0E0E]">
-                    {employeeProfile.annualUsed}/{employeeProfile.annualTotal}
+                    {annualBalance.used}/{annualBalance.total}
                   </strong>
                   <span className="text-[#777]">Annual</span>
                 </div>
@@ -190,7 +205,10 @@ export default function AppLayout() {
           <div className="flex-shrink-0 px-3 pb-4 bg-white border-t border-[#E0E0E0]">
             <button
               type="button"
-              onClick={() => navigate('/login')}
+              onClick={async () => {
+                await signOut();
+                navigate('/login');
+              }}
               className="w-full flex items-center gap-3 px-4 py-3 text-sm font-medium text-[#777] hover:text-[#E04F4F] hover:bg-[#F0F7F8] transition-colors brand-corner"
             >
               <LogOut className="w-5 h-5" strokeWidth={1.5} />

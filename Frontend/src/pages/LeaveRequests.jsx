@@ -1,52 +1,13 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CheckCircle, Clock, XCircle } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 
-const initialTeamRequests = [
-  {
-    id: 'req-1',
-    employee: 'Ananya Sharma',
-    empId: 'INEMP6421',
-    type: 'Paid Time Off (PTO)',
-    details: '04/14/2026 - Full',
-    days: 1,
-    reason: 'Family function',
-    requestedOn: '04/01/2026',
-    status: 'Pending',
-  },
-  {
-    id: 'req-2',
-    employee: 'Rahul Menon',
-    empId: 'INEMP5589',
-    type: 'Work From Home',
-    details: '04/16/2026 - Full',
-    days: 1,
-    reason: 'Home maintenance',
-    requestedOn: '04/02/2026',
-    status: 'Pending',
-  },
-  {
-    id: 'req-3',
-    employee: 'Priya Nair',
-    empId: 'INEMP7012',
-    type: 'Optional Holiday',
-    details: '04/22/2026 - Full',
-    days: 1,
-    reason: 'Optional Holiday',
-    requestedOn: '03/28/2026',
-    status: 'Pending',
-  },
-  {
-    id: 'req-4',
-    employee: 'Karthik Rao',
-    empId: 'INEMP6190',
-    type: 'Compensatory Off',
-    details: '03/30/2026 - Full',
-    days: 1,
-    reason: 'Weekend deployment support',
-    requestedOn: '03/25/2026',
-    status: 'Approved',
-  },
-];
+function formatDate(value) {
+  if (!value) return '';
+  const [y, m, d] = value.split('-');
+  return `${m}/${d}/${y}`;
+}
 
 function StatusBadge({ status }) {
   if (status === 'Approved') {
@@ -74,7 +35,22 @@ function StatusBadge({ status }) {
 }
 
 export default function LeaveRequests() {
-  const [requests, setRequests] = useState(initialTeamRequests);
+  const { user } = useAuth();
+  const [requests, setRequests] = useState([]);
+
+  const load = async () => {
+    if (!user?.id) return;
+    const { data } = await supabase
+      .from('leave_requests')
+      .select('*, employee:profiles!leave_requests_employee_id_fkey(emp_id, name), leave_types(name)')
+      .eq('profiles.manager_id', user.id)
+      .order('requested_on', { ascending: false });
+    setRequests(data ?? []);
+  };
+
+  useEffect(() => {
+    load();
+  }, [user?.id]);
 
   const pendingCount = useMemo(
     () => requests.filter((r) => r.status === 'Pending').length,
@@ -82,7 +58,11 @@ export default function LeaveRequests() {
   );
 
   const updateStatus = (id, status) => {
-    setRequests((prev) => prev.map((r) => (r.id === id ? { ...r, status } : r)));
+    supabase
+      .from('leave_requests')
+      .update({ status, reviewed_by: user.id, reviewed_at: new Date().toISOString() })
+      .eq('id', id)
+      .then(() => load());
   };
 
   return (
@@ -115,14 +95,14 @@ export default function LeaveRequests() {
             {requests.map((req) => (
               <tr key={req.id} className="hover:bg-[#F0F7F8] transition-colors">
                 <td className="py-5 px-4">
-                  <p className="font-bold text-[#0E0E0E]">{req.employee}</p>
-                  <p className="text-xs text-[#777] mt-0.5">{req.empId}</p>
+                  <p className="font-bold text-[#0E0E0E]">{req.employee?.name}</p>
+                  <p className="text-xs text-[#777] mt-0.5">{req.employee?.emp_id}</p>
                 </td>
-                <td className="py-5 px-4 font-medium">{req.type}</td>
-                <td className="py-5 px-4 text-sm text-[#555]">{req.details}</td>
+                <td className="py-5 px-4 font-medium">{req.leave_types?.name}</td>
+                <td className="py-5 px-4 text-sm text-[#555]">{formatDate(req.start_date)} - {req.duration}</td>
                 <td className="py-5 px-4 font-bold">{req.days}</td>
                 <td className="py-5 px-4 text-sm text-[#555] max-w-[12rem]">{req.reason}</td>
-                <td className="py-5 px-4 text-sm text-[#555]">{req.requestedOn}</td>
+                <td className="py-5 px-4 text-sm text-[#555]">{formatDate(req.requested_on)}</td>
                 <td className="py-5 px-4">
                   <StatusBadge status={req.status} />
                 </td>
@@ -150,6 +130,13 @@ export default function LeaveRequests() {
                 </td>
               </tr>
             ))}
+            {requests.length === 0 && (
+              <tr>
+                <td colSpan={8} className="py-10 text-center text-[#999]">
+                  No team requests to review.
+                </td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>

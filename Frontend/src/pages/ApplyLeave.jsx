@@ -1,26 +1,50 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Calendar } from 'lucide-react';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 
 export default function ApplyLeave() {
   const navigate = useNavigate();
-  const [leaveType, setLeaveType] = useState('Paid Time Off (PTO)');
+  const { user } = useAuth();
+  const [leaveTypes, setLeaveTypes] = useState([]);
+  const [leaveTypeId, setLeaveTypeId] = useState('');
+  const [startDate, setStartDate] = useState('');
   const [duration, setDuration] = useState('Full Day');
+  const [reason, setReason] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
 
-  const leaveOptions = [
-    'Paid Time Off (PTO)',
-    'Adoption',
-    'Business Travel',
-    'Compensatory Off',
-    'Contingency Bucket',
-    'Leave Without Pay (LWP)',
-    'Loss Of Pay (LOP)',
-    'My Special Day',
-    'Optional Holiday',
-    'Paternity Leave',
-    'Voting Leave',
-    'Work From Home',
-  ];
+  useEffect(() => {
+    supabase
+      .from('leave_types')
+      .select('id, code, name')
+      .order('id')
+      .then(({ data }) => setLeaveTypes(data ?? []));
+  }, []);
+
+  const handleSubmit = async () => {
+    if (!user?.id) return;
+    setError('');
+    setSubmitting(true);
+
+    const { error: insertError } = await supabase.from('leave_requests').insert({
+      employee_id: user.id,
+      leave_type_id: Number(leaveTypeId),
+      start_date: startDate,
+      end_date: startDate,
+      duration,
+      days: duration === 'Half Day' ? 0.5 : 1,
+      reason,
+    });
+
+    setSubmitting(false);
+    if (insertError) {
+      setError(insertError.message);
+      return;
+    }
+    navigate('/dashboard');
+  };
 
   return (
     <div className="max-w-2xl mx-auto bg-white border border-[#E0E0E0] brand-corner teal-hover">
@@ -36,13 +60,14 @@ export default function ApplyLeave() {
         <div className="flex flex-col gap-3">
           <label className="brand-plate text-xs text-[#47A2B0] tracking-widest">LEAVE TYPE</label>
           <select
-            value={leaveType}
-            onChange={(e) => setLeaveType(e.target.value)}
+            value={leaveTypeId}
+            onChange={(e) => setLeaveTypeId(e.target.value)}
             className="px-4 py-3 bg-white border border-[#E0E0E0] focus:border-[#47A2B0] text-[#0E0E0E] outline-none"
           >
-            {leaveOptions.map((opt) => (
-              <option key={opt} value={opt}>
-                {opt}
+            <option value="">Select leave type</option>
+            {leaveTypes.map((opt) => (
+              <option key={opt.id} value={opt.id}>
+                {opt.name}
               </option>
             ))}
           </select>
@@ -53,6 +78,8 @@ export default function ApplyLeave() {
             <label className="brand-plate text-xs text-[#47A2B0] tracking-widest">FROM DATE</label>
             <input
               type="date"
+              value={startDate}
+              onChange={(e) => setStartDate(e.target.value)}
               className="px-4 py-3 bg-white border border-[#E0E0E0] focus:border-[#47A2B0] text-[#0E0E0E] outline-none"
             />
           </div>
@@ -81,10 +108,14 @@ export default function ApplyLeave() {
           <label className="brand-plate text-xs text-[#47A2B0] tracking-widest">REASON</label>
           <textarea
             rows="4"
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
             placeholder="Enter reason for leave..."
             className="px-4 py-3 bg-white border border-[#E0E0E0] focus:border-[#47A2B0] text-[#0E0E0E] outline-none resize-none"
           />
         </div>
+
+        {error && <p className="text-sm text-[#E04F4F]">{error}</p>}
 
         <div className="pt-6 border-t border-[#E0E0E0] flex justify-end gap-4">
           <button
@@ -96,10 +127,11 @@ export default function ApplyLeave() {
           </button>
           <button
             type="button"
-            onClick={() => navigate('/dashboard')}
-            className="px-8 py-3 bg-[#47A2B0] text-white font-bold uppercase brand-plate text-xs hover:bg-[#2A7682] transition-colors tracking-wider"
+            onClick={handleSubmit}
+            disabled={submitting || !leaveTypeId || !startDate}
+            className="px-8 py-3 bg-[#47A2B0] text-white font-bold uppercase brand-plate text-xs hover:bg-[#2A7682] transition-colors tracking-wider disabled:opacity-60"
           >
-            SUBMIT REQUEST
+            {submitting ? 'SUBMITTING…' : 'SUBMIT REQUEST'}
           </button>
         </div>
       </div>

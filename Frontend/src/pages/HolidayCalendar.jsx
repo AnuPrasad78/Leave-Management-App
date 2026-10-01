@@ -1,11 +1,6 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown } from 'lucide-react';
-import {
-  holidayCalendars,
-  holidayCountries,
-  holidayLocations,
-  holidayYears,
-} from '../data/holidays';
+import { supabase } from '../lib/supabase';
 
 function FilterSelect({ label, value, onChange, options }) {
   return (
@@ -29,6 +24,11 @@ function FilterSelect({ label, value, onChange, options }) {
   );
 }
 
+function formatDate(value) {
+  const d = new Date(`${value}T00:00:00`);
+  return isNaN(d) ? value : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
+}
+
 function HolidayTable({ title, rows }) {
   return (
     <div className="flex-1 min-w-0">
@@ -48,14 +48,19 @@ function HolidayTable({ title, rows }) {
           <tbody>
             {rows.map((row, i) => (
               <tr
-                key={`${row.date}-${row.description}`}
+                key={row.id}
                 className={`border-t border-[#E0E0E0] ${i % 2 === 1 ? 'bg-[#F0F7F8]/60' : 'bg-white'}`}
               >
-                <td className="py-2.5 px-4 font-medium text-[#0E0E0E] whitespace-nowrap">{row.date}</td>
+                <td className="py-2.5 px-4 font-medium text-[#0E0E0E] whitespace-nowrap">{formatDate(row.date)}</td>
                 <td className="py-2.5 px-4 text-[#555] whitespace-nowrap">{row.day}</td>
                 <td className="py-2.5 px-4 text-[#333]">{row.description}</td>
               </tr>
             ))}
+            {rows.length === 0 && (
+              <tr>
+                <td colSpan={3} className="py-6 text-center text-[#999]">No holidays for this selection.</td>
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
@@ -64,11 +69,37 @@ function HolidayTable({ title, rows }) {
 }
 
 export default function HolidayCalendar() {
-  const [country, setCountry] = useState(holidayCountries[0]);
-  const [location, setLocation] = useState(holidayLocations[0]);
-  const [year, setYear] = useState(holidayYears[0]);
+  const [rows, setRows] = useState([]);
+  const [country, setCountry] = useState('INDIA');
+  const [location, setLocation] = useState('');
+  const [year, setYear] = useState('');
 
-  const calendar = useMemo(() => holidayCalendars[location], [location]);
+  useEffect(() => {
+    supabase
+      .from('holidays')
+      .select('*')
+      .order('date')
+      .then(({ data }) => {
+        const items = data ?? [];
+        setRows(items);
+        if (items.length > 0) {
+          setCountry(items[0].country);
+          setLocation(items[0].location);
+          setYear(String(items[0].year));
+        }
+      });
+  }, []);
+
+  const countries = useMemo(() => [...new Set(rows.map((r) => r.country))], [rows]);
+  const locations = useMemo(() => [...new Set(rows.map((r) => r.location))], [rows]);
+  const years = useMemo(() => [...new Set(rows.map((r) => String(r.year)))], [rows]);
+
+  const filtered = useMemo(
+    () => rows.filter((r) => r.country === country && r.location === location && String(r.year) === String(year)),
+    [rows, country, location, year],
+  );
+  const fixed = useMemo(() => filtered.filter((r) => !r.is_optional), [filtered]);
+  const optional = useMemo(() => filtered.filter((r) => r.is_optional), [filtered]);
 
   return (
     <div className="max-w-6xl mx-auto space-y-8">
@@ -81,9 +112,9 @@ export default function HolidayCalendar() {
         </div>
 
         <div className="flex flex-wrap gap-4 lg:gap-5">
-          <FilterSelect label="COUNTRY" value={country} onChange={setCountry} options={holidayCountries} />
-          <FilterSelect label="LOCATION" value={location} onChange={setLocation} options={holidayLocations} />
-          <FilterSelect label="YEAR" value={year} onChange={setYear} options={holidayYears} />
+          <FilterSelect label="COUNTRY" value={country} onChange={setCountry} options={countries} />
+          <FilterSelect label="LOCATION" value={location} onChange={setLocation} options={locations} />
+          <FilterSelect label="YEAR" value={year} onChange={setYear} options={years} />
         </div>
       </div>
 
@@ -92,10 +123,10 @@ export default function HolidayCalendar() {
       </p>
 
       <div className="flex flex-col xl:flex-row gap-8 xl:gap-10">
-        <HolidayTable title={`Fixed Holiday - ${calendar.fixed.length} Days`} rows={calendar.fixed} />
+        <HolidayTable title={`Fixed Holiday - ${fixed.length} Days`} rows={fixed} />
         <HolidayTable
-          title={`Optional Holiday List - Choose 3 Out of ${calendar.optional.length} Days`}
-          rows={calendar.optional}
+          title={`Optional Holiday List - Choose 3 Out of ${optional.length} Days`}
+          rows={optional}
         />
       </div>
     </div>

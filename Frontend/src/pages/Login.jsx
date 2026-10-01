@@ -1,27 +1,34 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { Clock, CheckCircle, BarChart3, Loader2 } from 'lucide-react';
+import { supabase } from '../lib/supabase';
 
 export default function Login() {
   const navigate = useNavigate();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
 
-  const handleSSOLogin = () => {
+  const handleSignIn = async () => {
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      navigate('/dashboard');
-    }, 1000);
+    setError('');
+    const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+    setIsLoading(false);
+
+    if (signInError) {
+      setError(signInError.message);
+      return;
+    }
+    navigate('/dashboard');
   };
 
   return (
     <div className="min-h-screen flex font-sans">
       {/* Left Panel - Deep teal brand panel */}
       <div className="hidden lg:flex w-1/2 relative overflow-hidden flex-col justify-between p-12 text-white" style={{ background: 'linear-gradient(160deg, #0a3d44 0%, #155e68 40%, #47A2B0 100%)' }}>
-        {/* Subtle grid pattern */}
         <div className="absolute inset-0 opacity-[0.04]" style={{ backgroundImage: 'radial-gradient(circle, white 1px, transparent 1px)', backgroundSize: '24px 24px' }}></div>
-        
-        {/* Logo on white background so it looks clean */}
+
         <div className="relative z-10 inline-block bg-white px-4 py-2 brand-corner" style={{ width: 'fit-content' }}>
           <img src="/emids-logo.png" alt="Emids" className="h-7 w-auto" />
         </div>
@@ -72,7 +79,6 @@ export default function Login() {
 
         <div className="flex-1 flex items-center justify-center p-8">
           <div className="max-w-md w-full">
-            {/* Mobile logo */}
             <div className="lg:hidden mb-8">
               <img src="/emids-logo.png" alt="Emids" className="h-7 w-auto" />
             </div>
@@ -83,25 +89,41 @@ export default function Login() {
             <div className="space-y-5">
               <div>
                 <label className="block brand-plate text-[10px] text-[#555] mb-2 tracking-widest">COMPANY EMAIL</label>
-                <input 
-                  type="email" 
-                  placeholder="you@emids.com" 
-                  disabled
-                  className="w-full px-4 py-3 border border-[#DDD] bg-white focus:outline-none focus:border-[#47A2B0] text-[#0E0E0E] opacity-50 cursor-not-allowed"
+                <input
+                  type="email"
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  placeholder="you@emids.com"
+                  autoComplete="email"
+                  className="w-full px-4 py-3 border border-[#DDD] bg-white focus:outline-none focus:border-[#47A2B0] text-[#0E0E0E]"
                 />
               </div>
               <div>
                 <label className="block brand-plate text-[10px] text-[#555] mb-2 tracking-widest">PASSWORD</label>
-                <input 
-                  type="password" 
-                  placeholder="••••••••" 
-                  disabled
-                  className="w-full px-4 py-3 border border-[#DDD] bg-white focus:outline-none focus:border-[#47A2B0] text-[#0E0E0E] opacity-50 cursor-not-allowed"
+                <input
+                  type="password"
+                  value={password}
+                  onChange={(e) => setPassword(e.target.value)}
+                  placeholder="••••••••"
+                  autoComplete="current-password"
+                  className="w-full px-4 py-3 border border-[#DDD] bg-white focus:outline-none focus:border-[#47A2B0] text-[#0E0E0E]"
                 />
               </div>
-              
-              <button disabled className="w-full py-3 bg-[#47A2B0] text-white font-bold brand-plate text-xs opacity-50 cursor-not-allowed tracking-widest">
-                SIGN IN
+
+              {error && (
+                <p className="text-sm text-[#E04F4F] border border-[#E04F4F]/30 bg-[#E04F4F]/5 px-4 py-3">
+                  {error}
+                </p>
+              )}
+
+              <button
+                type="button"
+                onClick={handleSignIn}
+                disabled={isLoading}
+                aria-busy={isLoading}
+                className="w-full py-3 bg-[#47A2B0] text-white font-bold brand-plate text-xs tracking-widest disabled:opacity-60"
+              >
+                {isLoading ? 'SIGNING IN…' : 'SIGN IN'}
               </button>
 
               <div className="relative py-3">
@@ -115,7 +137,7 @@ export default function Login() {
 
               <button
                 type="button"
-                onClick={handleSSOLogin}
+                onClick={handleSignIn}
                 disabled={isLoading}
                 aria-busy={isLoading}
                 className={`w-full flex items-center justify-center gap-3 py-3 border-2 border-[#47A2B0] font-bold transition-all brand-plate text-xs tracking-wider ${

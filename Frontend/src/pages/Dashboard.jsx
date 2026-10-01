@@ -1,7 +1,8 @@
-import React, { useId } from 'react';
+import React, { useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { PlusCircle, FileText, ClipboardCheck, Bell, HelpCircle } from 'lucide-react';
-import { employeeDetails, employeeProfile } from '../data/employee';
+import { supabase } from '../lib/supabase';
+import { useAuth } from '../lib/auth';
 
 function parseBalance(value) {
   return Number.parseInt(value, 10) || 0;
@@ -80,26 +81,65 @@ function BalanceBarRow({ code, label, value, max, showNa }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
+  const { profile, user } = useAuth();
+  const [balance, setBalance] = useState({ opening: 0, credited: 0, cont_utilized: 0, cont_available: 0 });
+  const [utilized, setUtilized] = useState(0);
+
+  useEffect(() => {
+    if (!user?.id) return;
+    const year = new Date().getFullYear();
+
+    supabase
+      .from('leave_balances')
+      .select('opening, credited, cont_utilized, cont_available')
+      .eq('employee_id', user.id)
+      .eq('year', year)
+      .maybeSingle()
+      .then(({ data }) => {
+        if (data) setBalance(data);
+      });
+
+    supabase
+      .from('leave_requests')
+      .select('days')
+      .eq('employee_id', user.id)
+      .eq('status', 'Approved')
+      .gte('start_date', `${year}-01-01`)
+      .lte('start_date', `${year}-12-31`)
+      .then(({ data }) => {
+        const total = (data ?? []).reduce((sum, r) => sum + Number(r.days), 0);
+        setUtilized(total);
+      });
+  }, [user?.id]);
+
+  const opening = balance.opening ?? 0;
+  const credited = balance.credited ?? 0;
+  const avail = credited - utilized;
+  const contUtilized = balance.cont_utilized ?? 0;
+  const contAvailable = balance.cont_available ?? 0;
+  const contHasPool = contUtilized > 0 || contAvailable > 0;
 
   const stats = [
-    { code: 'OP', label: 'OPENING', value: '00' },
-    { code: 'CR', label: 'CREDITED', value: '25' },
-    { code: 'UT', label: 'UTILIZED', value: '00' },
-    { code: 'AV', label: 'AVAILABLE', value: '25' },
-    { code: 'CU', label: 'CONT. UTILIZED', value: '00' },
-    { code: 'CA', label: 'CONT. AVAILABLE', value: '00' },
+    { code: 'OP', label: 'OPENING', value: String(opening).padStart(2, '0') },
+    { code: 'CR', label: 'CREDITED', value: String(credited).padStart(2, '0') },
+    { code: 'UT', label: 'UTILIZED', value: String(utilized).padStart(2, '0') },
+    { code: 'AV', label: 'AVAILABLE', value: String(avail).padStart(2, '0') },
+    { code: 'CU', label: 'CONT. UTILIZED', value: String(contUtilized).padStart(2, '0') },
+    { code: 'CA', label: 'CONT. AVAILABLE', value: String(contAvailable).padStart(2, '0') },
   ];
-
-  const credited = parseBalance(stats.find((s) => s.label === 'CREDITED')?.value ?? '0');
-  const utilized = parseBalance(stats.find((s) => s.label === 'UTILIZED')?.value ?? '0');
-  const contUtilized = parseBalance(stats.find((s) => s.label === 'CONT. UTILIZED')?.value ?? '0');
-  const contAvailable = parseBalance(stats.find((s) => s.label === 'CONT. AVAILABLE')?.value ?? '0');
-  const contHasPool = contUtilized > 0 || contAvailable > 0;
 
   const actions = [
     { title: 'Apply Leave', path: '/apply-leave', desc: 'Request time off', icon: PlusCircle },
     { title: 'My Requests', path: '/leave-details', desc: 'View your history', icon: FileText },
     { title: 'Leave Requests', path: '/leave-requests', desc: 'Approve team requests', icon: ClipboardCheck },
+  ];
+
+  const employeeDetails = [
+    { label: 'Emp ID', value: profile?.emp_id || '—' },
+    { label: 'Account', value: profile?.account || '—' },
+    { label: 'Project', value: profile?.project || '—' },
+    { label: 'Function', value: profile?.function || '—' },
+    { label: 'Role', value: profile?.role || '—' },
   ];
 
   return (
@@ -114,11 +154,11 @@ export default function Dashboard() {
           <div className="flex flex-col lg:flex-row">
             <div className="lg:w-[17rem] flex-shrink-0 px-6 py-6 bg-[#F0F7F8] border-b lg:border-b-0 lg:border-r border-[#E0E0E0] flex flex-col items-center text-center">
               <div className="w-16 h-16 rounded-full bg-[#47A2B0] flex items-center justify-center text-white text-xl font-bold mb-3 border-2 border-[#ABC7CA]">
-                {employeeProfile.initials}
+                {profile?.initials ?? '—'}
               </div>
-              <p className="font-bold text-[#0E0E0E] leading-snug">{employeeProfile.name}</p>
-              <p className="text-[#47A2B0] text-xs mt-1 brand-plate tracking-wider">{employeeProfile.role}</p>
-              <p className="text-[#777] text-xs mt-1">{employeeProfile.email}</p>
+              <p className="font-bold text-[#0E0E0E] leading-snug">{profile?.name ?? 'Employee'}</p>
+              <p className="text-[#47A2B0] text-xs mt-1 brand-plate tracking-wider">{profile?.role ?? ''}</p>
+              <p className="text-[#777] text-xs mt-1">{profile?.email ?? user?.email ?? ''}</p>
             </div>
 
             <div className="flex-1 p-6 md:p-8">
@@ -175,7 +215,7 @@ export default function Dashboard() {
       <div>
         <div className="flex items-center gap-4 mb-6">
           <span className="w-8 h-[3px]" style={{ background: 'linear-gradient(to right, #9DC6CC, #57A6B3)' }} />
-          <h2 className="brand-plate text-xs text-[#47A2B0] tracking-widest">LEAVE BALANCES · 2026</h2>
+          <h2 className="brand-plate text-xs text-[#47A2B0] tracking-widest">LEAVE BALANCES · {new Date().getFullYear()}</h2>
         </div>
 
         <div className="bg-white border border-[#E0E0E0] brand-corner p-6 md:p-8 teal-hover-sm">
