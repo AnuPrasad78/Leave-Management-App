@@ -1,7 +1,11 @@
 import { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from './supabase';
 
-const AuthContext = createContext({ user: null, profile: null, loading: true });
+const AuthContext = createContext({ user: null, profile: null, isManager: false, loading: true });
+
+export function isManagerRole(role) {
+  return typeof role === 'string' && role.toUpperCase().includes('MANAGER');
+}
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
@@ -49,7 +53,7 @@ export function AuthProvider({ children }) {
   const signOut = () => supabase.auth.signOut();
 
   return (
-    <AuthContext.Provider value={{ user, profile, loading, signOut }}>
+    <AuthContext.Provider value={{ user, profile, isManager: isManagerRole(profile?.role), loading, signOut }}>
       {children}
     </AuthContext.Provider>
   );

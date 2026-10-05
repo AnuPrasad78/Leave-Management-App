@@ -1,6 +1,6 @@
 import React, { useEffect, useId, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { PlusCircle, FileText, ClipboardCheck, Bell, HelpCircle } from 'lucide-react';
+import { PlusCircle, FileText, ClipboardCheck, Bell, Flag, HelpCircle } from 'lucide-react';
 import { supabase } from '../lib/supabase';
 import { useAuth } from '../lib/auth';
 
@@ -81,7 +81,7 @@ function BalanceBarRow({ code, label, value, max, showNa }) {
 
 export default function Dashboard() {
   const navigate = useNavigate();
-  const { profile, user } = useAuth();
+  const { profile, user, isManager } = useAuth();
   const [balance, setBalance] = useState({ opening: 0, credited: 0, cont_utilized: 0, cont_available: 0 });
   const [utilized, setUtilized] = useState(0);
 
@@ -128,11 +128,22 @@ export default function Dashboard() {
     { code: 'CA', label: 'CONT. AVAILABLE', value: String(contAvailable).padStart(2, '0') },
   ];
 
-  const actions = [
-    { title: 'Apply Leave', path: '/apply-leave', desc: 'Request time off', icon: PlusCircle },
-    { title: 'My Requests', path: '/leave-details', desc: 'View your history', icon: FileText },
-    { title: 'Leave Requests', path: '/leave-requests', desc: 'Approve team requests', icon: ClipboardCheck },
-  ];
+  const actions = isManager
+    ? [
+        { title: 'Apply Leave', path: '/apply-leave', desc: 'Request time off', icon: PlusCircle },
+        { title: 'My Requests', path: '/leave-details', desc: 'View your history', icon: FileText },
+        {
+          title: 'Leave Requests',
+          path: '/leave-requests',
+          desc: 'Approve team requests',
+          icon: ClipboardCheck,
+        },
+      ]
+    : [
+        { title: 'Apply Leave', path: '/apply-leave', desc: 'Request time off', icon: PlusCircle },
+        { title: 'My Requests', path: '/leave-details', desc: 'View your history', icon: FileText },
+        { title: 'Holidays', path: '/holidays', desc: 'Plan around holidays', icon: Flag },
+      ];
 
   const employeeDetails = [
     { label: 'Emp ID', value: profile?.emp_id || '—' },

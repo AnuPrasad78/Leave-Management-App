@@ -40,10 +40,12 @@ function navLabelForPath(pathname) {
 export default function AppLayout() {
   const navigate = useNavigate();
   const { pathname } = useLocation();
-  const { profile, user, signOut } = useAuth();
+  const { profile, user, signOut, isManager } = useAuth();
   const [annualBalance, setAnnualBalance] = useState({ used: 0, total: 0 });
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const [activeNav, setActiveNav] = useState(() => navLabelForPath(pathname));
+  const [notifications, setNotifications] = useState([]);
+  const [isNotifOpen, setIsNotifOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -62,6 +64,90 @@ export default function AppLayout() {
   }, [pathname]);
 
   useEffect(() => {
+    if (!user?.id) return undefined;
+
+    let cancelled = false;
+    supabase
+      .from('notifications')
+      .select('*')
+      .eq('recipient_id', user.id)
+      .order('created_at', { ascending: false })
+      .limit(20)
+      .then(({ data }) => {
+        if (!cancelled) setNotifications(data ?? []);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [user?.id, isNotifOpen]);
+
+  useEffect(() => {
+    if (!user?.id) return undefined;
+
+    const channel = supabase
+      .channel('app-layout-notifications')
+      .on(
+        'postgres_changes',
+        { event: 'INSERT', schema: 'public', table: 'notifications' },
+        (payload) => {
+          if (payload.new?.recipient_id === user.id) {
+            setNotifications((prev) =>
+              prev.some((n) => n.id === payload.new.id)
+                ? prev
+                : [payload.new, ...prev].slice(0, 20),
+            );
+          }
+        },
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!isNotifOpen) return undefined;
+
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape') setIsNotifOpen(false);
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isNotifOpen]);
+
+  const unreadCount = notifications.filter((n) => !n.is_read).length;
+
+  const markNotificationRead = async (notification) => {
+    if (!notification.is_read) {
+      setNotifications((prev) =>
+        prev.map((n) => (n.id === notification.id ? { ...n, is_read: true } : n)),
+      );
+      await supabase.from('notifications').update({ is_read: true }).eq('id', notification.id);
+    }
+    setIsNotifOpen(false);
+    navigate('/leave-requests');
+  };
+
+  const markAllNotificationsRead = async () => {
+    setNotifications((prev) => prev.map((n) => ({ ...n, is_read: true })));
+    await supabase
+      .from('notifications')
+      .update({ is_read: true })
+      .eq('recipient_id', user.id)
+      .eq('is_read', false);
+  };
+
+  const formatNotifDate = (value) =>
+    new Date(value).toLocaleString('en-US', {
+      month: 'numeric',
+      day: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+    });
+
+  useEffect(() => {
     if (!isSidebarOpen) return undefined;
 
     const onKeyDown = (e) => {
@@ -74,6 +160,10 @@ export default function AppLayout() {
       window.removeEventListener('keydown', onKeyDown);
     };
   }, [isSidebarOpen]);
+
+  const visibleNavItems = isManager
+    ? navItems
+    : navItems.filter((item) => item.path !== '/leave-requests');
 
   const today = new Date();
   const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
@@ -126,11 +216,83 @@ export default function AppLayout() {
           <button type="button" className="text-[#999] hover:text-[#47A2B0] transition-colors">
             <Search className="w-5 h-5" strokeWidth={1.5} />
           </button>
-          <button type="button" className="text-[#999] hover:text-[#47A2B0] transition-colors">
-            <Bell className="w-5 h-5" strokeWidth={1.5} />
-          </button>
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setIsNotifOpen(!isNotifOpen)}
+              aria-label={unreadCount > 0 ? `Notifications, ${unreadCount} unread` : 'Notifications'}
+              className={`relative text-[#999] transition-colors ${
+                isNotifOpen ? 'text-[#47A2B0]' : 'hover:text-[#47A2B0]'
+              }`}
+            >
+              <Bell className="w-5 h-5" strokeWidth={1.5} />
+              {unreadCount > 0 && (
+                <span className="absolute -top-1.5 -right-2 min-w-[1.1rem] h-[1.1rem] px-1 flex items-center justify-center rounded-full bg-[#E04F4F] text-white text-[10px] font-bold leading-none border-2 border-white">
+                  {unreadCount > 9 ? '9+' : unreadCount}
+                </span>
+              )}
+            </button>
+
+            {isNotifOpen && (
+              <div className="absolute right-0 top-10 w-80 bg-white border border-[#E0E0E0] shadow-[0_10px_30px_rgba(71,162,176,0.18)] brand-corner z-40">
+                <div
+                  className="h-1 w-full"
+                  style={{ background: 'linear-gradient(to right, #9DC6CC, #72B3BE, #57A6B3)' }}
+                />
+                <div className="bg-[#F0F7F8] border-b border-[#ABC7CA] px-4 py-3 flex items-center justify-between brand-plate text-[10px] tracking-widest">
+                  <span className="text-[#47A2B0] font-bold">NOTIFICATIONS ({unreadCount})</span>
+                  <button
+                    type="button"
+                    onClick={markAllNotificationsRead}
+                    className="text-[#777] hover:text-[#47A2B0] transition-colors"
+                  >
+                    MARK ALL READ
+                  </button>
+                </div>
+                <div className="max-h-80 overflow-y-auto divide-y divide-[#E0E0E0]">
+                  {notifications.map((n) => (
+                    <button
+                      key={n.id}
+                      type="button"
+                      onClick={() => markNotificationRead(n)}
+                      className="w-full text-left px-4 py-3 flex gap-3 hover:bg-[#F0F7F8] transition-colors"
+                    >
+                      <span
+                        className={`w-2 h-2 rounded-full flex-shrink-0 mt-1.5 ${
+                          n.is_read ? 'bg-[#E0E0E0]' : 'bg-[#47A2B0]'
+                        }`}
+                      />
+                      <span className="min-w-0">
+                        <span className="block text-sm font-medium text-[#0E0E0E] truncate">
+                          {n.title}
+                        </span>
+                        {n.message && (
+                          <span className="block text-xs text-[#777] mt-0.5 line-clamp-2">{n.message}</span>
+                        )}
+                        <span className="block text-[10px] text-[#999] mt-1 brand-plate tracking-wider">
+                          {formatNotifDate(n.created_at)}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                  {notifications.length === 0 && (
+                    <p className="py-10 text-center text-sm text-[#999]">No notifications yet.</p>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
         </div>
       </header>
+
+      {isNotifOpen && (
+        <button
+          type="button"
+          aria-label="Close notifications"
+          className="fixed inset-0 z-20 bg-transparent cursor-default"
+          onClick={() => setIsNotifOpen(false)}
+        />
+      )}
 
       <div className="flex-1 flex relative">
         <div
@@ -168,7 +330,7 @@ export default function AppLayout() {
             </div>
 
             <nav className="px-3 py-4 space-y-1 bg-[#F2F2F0]">
-              {navItems.map((item) => (
+              {visibleNavItems.map((item) => (
                 <button
                   key={item.label}
                   type="button"
